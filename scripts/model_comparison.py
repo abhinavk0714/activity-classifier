@@ -1,5 +1,5 @@
 """
-Step 5: Compare local text models on real captured data.
+Compare local text models on real captured data.
 
 Two comparisons, both against the same already-captured session (a scripted
 ~4-minute sequence of known activities, so ground truth is known):
@@ -17,7 +17,7 @@ below are content-verified (checked against actual captured URLs/text),
 not just the original rough timer boundaries — the original timer-based
 boundaries didn't line up with when the on-screen content actually changed.
 
-Run: python 05_model_comparison.py
+Run: python scripts/model_comparison.py
 """
 
 import subprocess

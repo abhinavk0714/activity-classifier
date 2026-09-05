@@ -16,13 +16,13 @@ Prerequisites:
 - Ollama must be running locally with a model pulled, e.g.:
     ollama pull qwen2.5:3b
 
-Run: python classify_recent_activity.py [--minutes 5]
+Run (from the repo root): python scripts/classify_recent_activity.py [--minutes 5]
 
 For comparing variations (different label sets, prompts, models) against
 the same underlying data rather than fresh live captures each time, use
 --start/--end with a fixed, already-captured time window instead of
 --minutes — this queries the same stored data every run:
-    python classify_recent_activity.py --start 2026-08-17T18:00:00Z --end 2026-08-17T18:05:00Z
+    python scripts/classify_recent_activity.py --start 2026-08-19T00:08:50Z --end 2026-08-19T00:12:05Z
 """
 
 import argparse

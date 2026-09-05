@@ -18,7 +18,7 @@ REST API. No Rust, no Tauri, no monorepo conventions apply here.
 Default model is `qwen2.5:3b` — see `FINDINGS.md` for why (`llama3.2:3b`
 had a severe single-label bias; `phi3.5` frequently ignored the closed
 label set). Changing the default model should come with a re-run of the
-comparison in `05_model_comparison.py`, not just a swap.
+comparison in `scripts/model_comparison.py`, not just a swap.
 
 ## Tooling
 

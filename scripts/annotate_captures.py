@@ -1,5 +1,5 @@
 """
-Step 6: Annotate real captured screenshots with the classifier's output.
+Annotate real captured screenshots with the classifier's output.
 
 Goal: a concrete, provably-real demo artifact — actual captured screenshots
 with the model's classification stamped directly onto the image, not a
@@ -14,11 +14,11 @@ using the capture's offset_index, so older sessions can still be annotated.
 
 Prerequisites:
 - screenpipe running (`screenpipe record`) and reachable at localhost:3030
-- Ollama running with the classifier model pulled (see classify_recent_activity.py)
+- Ollama running with the classifier model pulled (see scripts/classify_recent_activity.py)
 - ffmpeg on PATH (only needed for captures that have been merged into video)
 
-Run: python 06_annotate_captures.py [--minutes 5] [--limit 10]
-   or: python 06_annotate_captures.py --start <iso> --end <iso> [--limit 50]
+Run (from the repo root): python scripts/annotate_captures.py [--minutes 5] [--limit 10]
+   or: python scripts/annotate_captures.py --start <iso> --end <iso> [--limit 50]
        to annotate a fixed, already-captured window instead of "recent".
 Output: each run gets its own subfolder under ./annotated/, named after the
 window, with an index.txt listing every frame's timestamp/app/label.
