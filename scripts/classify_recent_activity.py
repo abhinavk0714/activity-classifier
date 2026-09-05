@@ -10,6 +10,16 @@ already extracted by screenpipe's own accessibility/OCR pipeline is more
 reliable than re-deriving it from pixels, and a small local text model is
 far cheaper and faster than a vision model for this kind of judgment call.
 
+What labels exist and how the model is told to use them is domain-specific
+(see profiles.py), not hardcoded here — pass --profile to switch fields.
+
+Alongside the text-based label, this also reports plain behavioral signals
+computed straight from screenpipe's capture metadata (app switches, idle
+gaps, repeated/unchanged captures) — no model involved. These are cheap,
+robust, and domain-general: they're what the model can miss (e.g. "stuck
+re-reading the same feedback" looks a lot like "reading" in the text alone,
+but shows up clearly as a long run of near-identical captures).
+
 Prerequisites:
 - screenpipe must already be running (`screenpipe record`) and reachable
   at http://localhost:3030
@@ -17,6 +27,7 @@ Prerequisites:
     ollama pull qwen2.5:3b
 
 Run (from the repo root): python scripts/classify_recent_activity.py [--minutes 5]
+                       or: python scripts/classify_recent_activity.py --profile language_acquisition
 
 For comparing variations (different label sets, prompts, models) against
 the same underlying data rather than fresh live captures each time, use
@@ -32,28 +43,21 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from profiles import DEFAULT_PROFILE, PROFILES
+
 SCREENPIPE_API = "http://localhost:3030"
 OLLAMA_API = "http://localhost:11434"
 # qwen2.5:3b — see FINDINGS.md; the other two candidates tested
 # (llama3.2:3b, phi3.5) each had a disqualifying failure mode.
 OLLAMA_MODEL = "qwen2.5:3b"
 
-LABELS = [
-    "writing",
-    "coding",
-    "reading",
-    "researching",
-    "communicating",
-    "browsing_entertainment",
-    "idle",
-    "confused_or_stuck",
-]
-
 PROMPT_TEMPLATE = (
     "You are looking at text extracted from a user's screen over the last "
-    "few minutes (not the raw screenshots, just the text that was visible). "
-    "Classify what the user was most likely doing into exactly one of these "
-    "categories: {labels}. "
+    "few minutes (not the raw screenshots, just the text that was visible)."
+    "{context_block}"
+    "Classify what the user was most likely doing into exactly one of "
+    "these categories: {labels}. "
+    "{signals_block}"
     "Respond with only the category name, nothing else.\n\n"
     "Screen text:\n{text}"
 )
@@ -69,7 +73,10 @@ def get_api_token() -> str:
     return lines[-1]
 
 
-def fetch_recent_text(token: str, minutes: int = None, start: str = None, end: str = None) -> str:
+def fetch_recent_captures(token: str, minutes: int = None, start: str = None, end: str = None) -> list[dict]:
+    """Return captures in the window as dicts with timestamp/app_name/text,
+    ordered oldest to newest. Preserves per-capture metadata (unlike a flat
+    text blob) so behavioral signals can be computed from it."""
     if start and end:
         # fixed window — same data every call, for comparing variations fairly
         pass
@@ -83,7 +90,7 @@ def fetch_recent_text(token: str, minutes: int = None, start: str = None, end: s
         "limit": 50,
     }
 
-    chunks = []
+    captures = []
     for content_type in ("accessibility", "ocr"):
         resp = requests.get(
             f"{SCREENPIPE_API}/search",
@@ -93,23 +100,80 @@ def fetch_recent_text(token: str, minutes: int = None, start: str = None, end: s
         )
         resp.raise_for_status()
         for item in resp.json().get("data", []):
-            text = item.get("content", {}).get("text", "").strip()
+            content = item.get("content", {})
+            text = content.get("text", "").strip()
             if text:
-                chunks.append(text)
-        if chunks:
+                captures.append({
+                    "timestamp": content.get("timestamp"),
+                    "app_name": content.get("app_name") or "unknown",
+                    "text": text,
+                })
+        if captures:
             # accessibility text is preferred; only fall back to OCR if empty
             break
 
-    # de-duplicate consecutive near-identical captures (common with frequent polling)
+    captures.sort(key=lambda c: c["timestamp"] or "")
+    return captures
+
+
+def dedup_text(captures: list[dict]) -> str:
+    """Concatenate capture text, dropping consecutive near-identical
+    captures (common with frequent polling) for the text handed to the model."""
     deduped = []
-    for chunk in chunks:
-        if not deduped or chunk != deduped[-1]:
-            deduped.append(chunk)
+    for c in captures:
+        if not deduped or c["text"] != deduped[-1]:
+            deduped.append(c["text"])
     return "\n---\n".join(deduped)
 
 
-def classify(text: str) -> str:
-    prompt = PROMPT_TEMPLATE.format(labels=", ".join(LABELS), text=text[:6000])
+def compute_signals(captures: list[dict]) -> dict:
+    """Plain behavioral signals from capture metadata — no model involved.
+    Cheap and domain-general: catches things the text alone tends to miss,
+    like "stuck re-reading the same screen" looking identical to "reading"."""
+    if len(captures) < 2:
+        return {}
+
+    timestamps = [datetime.fromisoformat(c["timestamp"]) for c in captures]
+    apps = [c["app_name"] for c in captures]
+
+    gaps = [(b - a).total_seconds() for a, b in zip(timestamps, timestamps[1:])]
+    app_switches = sum(1 for a, b in zip(apps, apps[1:]) if a != b)
+    repeats = sum(1 for a, b in zip(captures, captures[1:]) if a["text"] == b["text"])
+
+    return {
+        "duration_seconds": round((timestamps[-1] - timestamps[0]).total_seconds()),
+        "capture_count": len(captures),
+        "distinct_apps": sorted(set(apps)),
+        "app_switches": app_switches,
+        "longest_gap_seconds": round(max(gaps)) if gaps else 0,
+        "repeat_ratio": round(repeats / (len(captures) - 1), 2),
+    }
+
+
+def format_signals(signals: dict) -> str:
+    if not signals:
+        return ""
+    apps = ", ".join(signals["distinct_apps"])
+    return (
+        f"{signals['capture_count']} captures over {signals['duration_seconds']}s "
+        f"across [{apps}] ({signals['app_switches']} app switch(es)); "
+        f"longest gap without a new capture: {signals['longest_gap_seconds']}s; "
+        f"{signals['repeat_ratio']:.0%} of consecutive captures were unchanged repeats"
+    )
+
+
+def classify(text: str, labels: list[str], context: str, signals_text: str) -> str:
+    context_block = f" {context}" if context else ""
+    signals_block = (
+        f"Session signals (for context, not a label to output): {signals_text}. "
+        if signals_text else ""
+    )
+    prompt = PROMPT_TEMPLATE.format(
+        context_block=context_block,
+        labels=", ".join(labels),
+        signals_block=signals_block,
+        text=text[:6000],
+    )
     resp = requests.post(
         f"{OLLAMA_API}/api/generate",
         json={
@@ -136,7 +200,11 @@ def main():
                               "instead of a shifting 'last N minutes' window.")
     parser.add_argument("--end", type=str, default=None,
                          help="Fixed window end (ISO 8601). See --start.")
+    parser.add_argument("--profile", type=str, default=DEFAULT_PROFILE, choices=list(PROFILES),
+                         help="Label set + classification context to use (see profiles.py).")
     args = parser.parse_args()
+
+    profile = PROFILES[args.profile]
 
     try:
         token = get_api_token()
@@ -144,19 +212,26 @@ def main():
         print(f"Could not get API token — is screenpipe built and set up? ({e})")
         sys.exit(1)
 
-    text = fetch_recent_text(token, minutes=args.minutes, start=args.start, end=args.end)
-    if not text:
+    captures = fetch_recent_captures(token, minutes=args.minutes, start=args.start, end=args.end)
+    if not captures:
         window = f"{args.start} to {args.end}" if args.start else f"last {args.minutes} minute(s)"
         print(f"No screen text captured in the window ({window}). "
               f"Is `screenpipe record` running?")
         sys.exit(1)
 
+    text = dedup_text(captures)
+    signals = compute_signals(captures)
+    signals_text = format_signals(signals)
+
     print(f"Captured text ({len(text)} chars):")
     print(text[:500] + ("..." if len(text) > 500 else ""))
     print()
+    if signals_text:
+        print(f"Session signals: {signals_text}")
+        print()
 
-    label = classify(text)
-    print(f"Classification: {label}")
+    label = classify(text, profile["labels"], profile["context"], signals_text)
+    print(f"Classification ({args.profile}): {label}")
 
 
 if __name__ == "__main__":
