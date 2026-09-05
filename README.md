@@ -63,27 +63,55 @@ pip install -r requirements.txt
    python scripts/classify_recent_activity.py --minutes 5
    ```
 
-This pulls the last N minutes of captured text, prints a preview of it, and
-prints a single classification label.
+This pulls the last N minutes of captured text, prints a preview of it,
+reports a few plain behavioral signals (see below), and prints a single
+classification label.
 
-## Labels
+## Domains / profiles
 
-A small, generic starting set:
+The classifier doesn't hardcode one label set. What it classifies into —
+and any extra context the model needs to do that well — lives in
+[`scripts/profiles.py`](scripts/profiles.py) as a small dictionary per
+field, selected with `--profile`:
 
+```bash
+python scripts/classify_recent_activity.py --profile language_acquisition
 ```
-writing, coding, reading, researching, communicating,
-browsing_entertainment, idle, confused_or_stuck
-```
 
-`confused_or_stuck` is the most interesting one to validate — whether a
-local model can pick up on struggle/confusion signals from screen text
-alone was the open question this project set out to test.
+- `general` (default) — a small generic starting set: `writing, coding,
+  reading, researching, communicating, browsing_entertainment, idle,
+  confused_or_stuck`.
+- `language_acquisition` — the first real target domain: teachers of
+  self-study language learners (e.g. EFL students using an AI chatbot)
+  have visibility into what happens inside their own tools, but none into
+  what a student does around them. Labels: `writing_practice,
+  reading_feedback, grammar_practice, vocab_lookup, translation_practice,
+  off_task_browsing, idle, confused_or_stuck`.
+
+Adding a new field means adding an entry to `profiles.py`, not touching
+the capture/classify engine.
+
+`confused_or_stuck` is the most interesting label in either profile —
+whether a local model can pick up on struggle/confusion signals from
+screen text alone was the open question this project set out to test.
+
+## Behavioral signals
+
+Alongside the model's label, each run also reports plain signals computed
+directly from screenpipe's capture metadata — no model involved: how many
+times the active app changed, the longest gap without a new capture, and
+what fraction of captures were unchanged repeats. These are cheap and
+domain-general, and catch things text classification alone tends to miss —
+e.g. "stuck re-reading the same feedback" can look identical to "reading"
+in the text, but shows up clearly as a long run of repeated captures with
+no app switching.
 
 ## Project layout
 
 ```
 scripts/
   classify_recent_activity.py   entry point — classify a live or fixed time window
+  profiles.py                   label sets + context per domain (add a field here)
   model_comparison.py           the model comparison behind FINDINGS.md
   annotate_captures.py          stamps classifier output onto real captured screenshots
 FINDINGS.md                     model comparison methodology and results

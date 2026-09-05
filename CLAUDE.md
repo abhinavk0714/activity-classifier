@@ -20,6 +20,30 @@ had a severe single-label bias; `phi3.5` frequently ignored the closed
 label set). Changing the default model should come with a re-run of the
 comparison in `scripts/model_comparison.py`, not just a swap.
 
+## Domain profiles
+
+Label sets and per-field classification context live in
+`scripts/profiles.py`, not in the engine (`classify_recent_activity.py`).
+A new field is a new dict entry there, not an engine change. Keep it that
+way — the goal is one general-purpose engine usable across many fields,
+not a tool hardcoded to whichever field is being optimized for right now.
+
+Within a profile, keep the label count similar to what's already there
+(~8). `FINDINGS.md` documents small local models degrading — bias toward
+one label, or ignoring the label set entirely — and that risk gets worse,
+not better, with more labels. Resist the urge to add labels for every
+nuance a domain expert wants captured; that's what behavioral signals
+(below) are for instead.
+
+## Behavioral signals
+
+`compute_signals()` derives plain, model-free signals from capture
+metadata (app switches, idle gaps, repeated/unchanged captures). This
+exists because some real distinctions — e.g. "stuck re-reading the same
+content" vs. "reading" — look identical in the text alone but are obvious
+from timing/repetition. Prefer extending this over adding finer-grained
+labels when a domain needs to distinguish flavors of "stuck" or "idle."
+
 ## Tooling
 
 Python 3, `venv`, `pip install -r requirements.txt`. No build step.
