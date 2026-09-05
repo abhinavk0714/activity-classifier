@@ -22,11 +22,10 @@ classification task.
 # Ollama, if not already installed
 brew install ollama
 ollama serve &
-ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
 ```
 
 ```bash
-cd activity-classifier
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -34,13 +33,13 @@ pip install -r requirements.txt
 
 ## Running
 
-1. Make sure screenpipe is running:
+1. Make sure [screenpipe](https://screenpipe.com) is recording:
    ```bash
-   ./target/release/screenpipe record --disable-audio --disable-telemetry
+   npx screenpipe record --disable-audio --disable-telemetry
    ```
    (`--disable-audio` since this classifier doesn't use it; `--disable-telemetry`
    to keep everything fully local, no anonymous usage events sent externally.)
-2. Make sure `ollama serve` is running with `llama3.2:3b` pulled.
+2. Make sure `ollama serve` is running with `qwen2.5:3b` pulled.
 3. Run:
 
 ```bash
@@ -62,3 +61,16 @@ writing, coding, reading, researching, communicating, browsing_entertainment, id
 `confused_or_stuck` is the most interesting one to validate — whether a
 local model can pick up on struggle/confusion signals from screen text
 alone is the open question this script exists to test.
+
+## Model choice
+
+`qwen2.5:3b` is the default (set in `classify_recent_activity.py`), chosen
+after comparing it against `llama3.2:3b` and `phi3.5` — see
+[`FINDINGS.md`](FINDINGS.md) for the comparison methodology and results.
+
+## Other scripts
+
+- `05_model_comparison.py` — runs the same classification prompt across
+  multiple Ollama models for side-by-side comparison.
+- `06_annotate_captures.py` — annotates captured screenshots with their
+  ground-truth label, used to build the `annotated/` reference set.

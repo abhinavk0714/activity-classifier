@@ -14,7 +14,7 @@ Prerequisites:
 - screenpipe must already be running (`screenpipe record`) and reachable
   at http://localhost:3030
 - Ollama must be running locally with a model pulled, e.g.:
-    ollama pull llama3.2:3b
+    ollama pull qwen2.5:3b
 
 Run: python classify_recent_activity.py [--minutes 5]
 
