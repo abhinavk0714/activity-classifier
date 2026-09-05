@@ -61,8 +61,8 @@ PROMPT_TEMPLATE = (
 
 def get_api_token() -> str:
     result = subprocess.run(
-        ["./target/release/screenpipe", "auth", "token"],
-        cwd="..", capture_output=True, text=True, check=True,
+        ["npx", "--yes", "screenpipe", "auth", "token"],
+        capture_output=True, text=True, check=True,
     )
     # stdout may include log lines; the token is the last non-empty line
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
