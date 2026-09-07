@@ -1,10 +1,10 @@
 # Activity Classifier
 
 A small, local-first tool that looks at what's on your screen and classifies
-what you're likely doing — writing, coding, reading, stuck, and so on —
-using text your computer already extracted, and a small language model
-running entirely on your own machine. No cloud calls, no screenshots sent
-anywhere, nothing to sign up for.
+what you're likely doing — writing, coding, reading, and so on — using text
+your computer already extracted, the page URL when you're in a browser, and
+a small language model running entirely on your own machine. No cloud
+calls, no screenshots sent anywhere, nothing to sign up for.
 
 > Built on top of **[screenpipe](https://screenpipe.com)**
 > ([github.com/screenpipe/screenpipe](https://github.com/screenpipe/screenpipe)) —
@@ -19,12 +19,20 @@ anywhere, nothing to sign up for.
 1. [screenpipe](https://screenpipe.com) runs in the background, continuously
    capturing your screen and extracting text from it — first via the OS
    accessibility tree (fast, exact), falling back to OCR when a window
-   doesn't expose accessibility text.
-2. This project asks screenpipe's local API for the text captured over a
-   given window of time.
-3. That text — not a screenshot — is handed to a small model running
-   locally via [Ollama](https://ollama.com), which classifies the activity
-   into one of a fixed set of labels.
+   doesn't expose accessibility text. It also records per-frame metadata:
+   the app and window name, and the browser URL when you're in a browser.
+2. This project asks screenpipe's local API for the text and metadata
+   captured over a given window of time.
+3. That text — not a screenshot — plus the page URL(s) is handed to a
+   small model running locally via [Ollama](https://ollama.com), which
+   classifies the activity into one of a fixed set of labels.
+
+`scripts/ocr_provider.py` is an optional second OCR pass over the frames
+screenpipe saves, for when screenpipe's own OCR misses text — notably
+non-Latin scripts (its 0.4.50 build returns English only for mixed
+Japanese/English screens). It uses the best local engine per platform
+(Apple Vision on macOS; Windows OCR / Tesseract elsewhere). See
+FINDINGS.md.
 
 ### Why text, not vision
 
@@ -79,21 +87,29 @@ python scripts/classify_recent_activity.py --profile language_acquisition
 ```
 
 - `general` (default) — a small generic starting set: `writing, coding,
-  reading, researching, communicating, browsing_entertainment, idle,
-  confused_or_stuck`.
+  reading, researching, communicating, browsing_entertainment, idle`.
 - `language_acquisition` — the first real target domain: teachers of
   self-study language learners (e.g. EFL students using an AI chatbot)
   have visibility into what happens inside their own tools, but none into
   what a student does around them. Labels: `writing_practice,
   reading_feedback, grammar_practice, vocab_lookup, translation_practice,
-  off_task_browsing, idle, confused_or_stuck`.
+  off_task_browsing, idle`.
 
-Adding a new field means adding an entry to `profiles.py`, not touching
-the capture/classify engine.
+A profile's `context` string can also tell the model how to read URLs for
+that field (e.g. which path means which app). Adding a new field means
+adding an entry to `profiles.py`, not touching the capture/classify
+engine.
 
-`confused_or_stuck` is the most interesting label in either profile —
-whether a local model can pick up on struggle/confusion signals from
-screen text alone was the open question this project set out to test.
+### On "stuck"
+
+Earlier versions had a `confused_or_stuck` label. It was dropped: whether
+a learner is stuck is a *temporal* question — same screen for a long time,
+repeated failed attempts at one question, escalating hint use — not
+something a single-frame classifier should compete over. A frame of a
+learner re-reading feedback for the fifth time still shows *grammar
+practice*; the struggle is only visible across the ordered sequence of
+frames plus their timestamps. That sequence-level pass is future work; the
+base labels come first.
 
 ## Behavioral signals
 
@@ -101,10 +117,28 @@ Alongside the model's label, each run also reports plain signals computed
 directly from screenpipe's capture metadata — no model involved: how many
 times the active app changed, the longest gap without a new capture, and
 what fraction of captures were unchanged repeats. These are cheap and
-domain-general, and catch things text classification alone tends to miss —
-e.g. "stuck re-reading the same feedback" can look identical to "reading"
-in the text, but shows up clearly as a long run of repeated captures with
-no app switching.
+domain-general, and are the raw material for the sequence-level "stuck"
+analysis described above.
+
+## Testing / reproducing
+
+Re-running screenpipe sessions to test a prompt or profile change is slow.
+Instead, freeze a recording window into a fixture once and iterate against
+it in seconds:
+
+```bash
+# build a fixture from your own screenpipe recording
+python scripts/build_fixture.py my_spec.json my_fixture.json
+
+# run the classifier over a fixture, report per-segment accuracy
+python tests/eval_fixture.py --fixture my_fixture.json --profile language_acquisition
+```
+
+`build_fixture.py` scrubs PII (OS user/host/home/full name, plus a
+per-spec host anonymisation and an optional gitignored `scrub.local`).
+`tests/fixtures/korero_bilingual.json` is a checked-in example.
+`screenpipe search --content-type ocr --start … --end …` reads the local
+DB directly, no daemon — handy for poking at captured data.
 
 ## Project layout
 
@@ -112,9 +146,14 @@ no app switching.
 scripts/
   classify_recent_activity.py   entry point — classify a live or fixed time window
   profiles.py                   label sets + context per domain (add a field here)
-  model_comparison.py           the model comparison behind FINDINGS.md
+  ocr_provider.py               optional per-platform OCR pass over saved frames
+  build_fixture.py              freeze a screenpipe window into a test fixture
+  model_comparison.py           the model comparison behind FINDINGS.md (older run)
   annotate_captures.py          stamps classifier output onto real captured screenshots
-FINDINGS.md                     model comparison methodology and results
+tests/
+  eval_fixture.py               run the classifier over a fixture, report accuracy
+  fixtures/                     checked-in example fixture + its build spec
+FINDINGS.md                     methodology and results
 requirements.txt
 LICENSE
 ```

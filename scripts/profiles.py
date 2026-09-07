@@ -23,7 +23,6 @@ PROFILES = {
             "communicating",
             "browsing_entertainment",
             "idle",
-            "confused_or_stuck",
         ],
         "context": "",
     },
@@ -44,7 +43,6 @@ PROFILES = {
             "translation_practice",
             "off_task_browsing",
             "idle",
-            "confused_or_stuck",
         ],
         "context": (
             "This is a language learner using self-study tools, most likely "
@@ -58,10 +56,13 @@ PROFILES = {
             "language. 'vocab_lookup' covers dictionaries, translation "
             "tools (e.g. Google Translate), or vocabulary drill apps. "
             "'grammar_practice' covers fill-in-the-blank, drag-and-drop, or "
-            "multiple-choice grammar drills. Use 'confused_or_stuck' when "
-            "the learner appears to be repeating the same failed attempt, "
-            "re-reading the same feedback without progressing, or "
-            "otherwise stalled."
+            "multiple-choice grammar drills. "
+            "On the initial pilot platform (Kōrero), the browser URL's path "
+            "identifies the tool: a path segment /gretel is a grammar-drill "
+            "app (grammar_practice); /polly is a translation tool "
+            "(translation_practice); /scotty is vocabulary practice "
+            "(vocab_lookup); /sevi simplifies reading passages "
+            "(reading_feedback); /nexus is the app-chooser home screen."
         ),
     },
 }

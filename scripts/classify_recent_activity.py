@@ -13,6 +13,12 @@ far cheaper and faster than a vision model for this kind of judgment call.
 What labels exist and how the model is told to use them is domain-specific
 (see profiles.py), not hardcoded here — pass --profile to switch fields.
 
+When the captured activity is in a browser, the distinct page URLs seen in
+the window are passed to the model too. A URL is clean (no OCR errors) and
+often says more about the activity than the visible text — which site,
+which app, whether the user switched to something off-task. Domain-general;
+per-field profiles can add how to read specific URLs (see profiles.py).
+
 Alongside the text-based label, this also reports plain behavioral signals
 computed straight from screenpipe's capture metadata (app switches, idle
 gaps, repeated/unchanged captures) — no model involved. These are cheap,
@@ -55,6 +61,7 @@ PROMPT_TEMPLATE = (
     "You are looking at text extracted from a user's screen over the last "
     "few minutes (not the raw screenshots, just the text that was visible)."
     "{context_block}"
+    "{url_block}"
     "Classify what the user was most likely doing into exactly one of "
     "these categories: {labels}. "
     "{signals_block}"
@@ -106,6 +113,7 @@ def fetch_recent_captures(token: str, minutes: int = None, start: str = None, en
                 captures.append({
                     "timestamp": content.get("timestamp"),
                     "app_name": content.get("app_name") or "unknown",
+                    "browser_url": content.get("browser_url") or "",
                     "text": text,
                 })
         if captures:
@@ -124,6 +132,19 @@ def dedup_text(captures: list[dict]) -> str:
         if not deduped or c["text"] != deduped[-1]:
             deduped.append(c["text"])
     return "\n---\n".join(deduped)
+
+
+def browser_urls(captures: list[dict], limit: int = 5) -> list[str]:
+    """Distinct browser URLs seen in the window, most-seen first. A URL says
+    a lot about the activity before any OCR text is read (which site, which
+    app, whether the user switched to something off-task), and it's clean —
+    no OCR errors. Domain-general: useful for any field, not just this one."""
+    counts: dict[str, int] = {}
+    for c in captures:
+        url = c.get("browser_url") or ""
+        if url:
+            counts[url] = counts.get(url, 0) + 1
+    return [u for u, _ in sorted(counts.items(), key=lambda kv: -kv[1])][:limit]
 
 
 def compute_signals(captures: list[dict]) -> dict:
@@ -162,14 +183,19 @@ def format_signals(signals: dict) -> str:
     )
 
 
-def classify(text: str, labels: list[str], context: str, signals_text: str) -> str:
+def classify(text: str, labels: list[str], context: str, signals_text: str,
+             urls: list[str]) -> str:
     context_block = f" {context}" if context else ""
+    url_block = (
+        f" The user's browser was on: {', '.join(urls)}. " if urls else ""
+    )
     signals_block = (
         f"Session signals (for context, not a label to output): {signals_text}. "
         if signals_text else ""
     )
     prompt = PROMPT_TEMPLATE.format(
         context_block=context_block,
+        url_block=url_block,
         labels=", ".join(labels),
         signals_block=signals_block,
         text=text[:6000],
@@ -222,15 +248,19 @@ def main():
     text = dedup_text(captures)
     signals = compute_signals(captures)
     signals_text = format_signals(signals)
+    urls = browser_urls(captures)
 
     print(f"Captured text ({len(text)} chars):")
     print(text[:500] + ("..." if len(text) > 500 else ""))
     print()
+    if urls:
+        print(f"Browser URLs: {', '.join(urls)}")
+        print()
     if signals_text:
         print(f"Session signals: {signals_text}")
         print()
 
-    label = classify(text, profile["labels"], profile["context"], signals_text)
+    label = classify(text, profile["labels"], profile["context"], signals_text, urls)
     print(f"Classification ({args.profile}): {label}")
 
 
