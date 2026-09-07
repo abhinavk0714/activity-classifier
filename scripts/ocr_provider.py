@@ -77,7 +77,8 @@ def merge_text(base: str, extra: str, scripts: tuple[str, ...] = ("ja",)) -> str
     add = []
     for line in extra.splitlines():
         line = line.strip()
-        if line and pat.search(line) and line not in seen:
+        # need >=2 script chars: single CJK glyphs are usually OCR'd UI icons
+        if line and len(pat.findall(line)) >= 2 and line not in seen:
             add.append(line)
             seen.add(line)
     if not add:
