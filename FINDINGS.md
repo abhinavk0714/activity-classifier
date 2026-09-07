@@ -292,5 +292,89 @@ re-OCR**: `language_acquisition` 3/3 (was 1/3 at the start of the
 session). `general` 0/3 — expected, it carries no domain context and is
 the fallback for unrecognised domains; the value is in the field profile.
 
-Not wired in: the Japanese re-OCR (`tmp/reocr.py` stays a standalone
-offline tool) and `compute_signals()` app-identity-from-URL (deferred).
+Not wired in yet: the OCR provider (below) and `compute_signals()`
+app-identity-from-URL (deferred).
+
+## OCR layer — root cause and the fix (research pass, 2026-09-07)
+
+### Why screenpipe drops Japanese — two stacked causes
+
+**1. screenpipe bug #2549** (`OCR languages not passed to Apple Vision in
+event-driven capture`). In the event-driven capture path, `--language` is
+parsed into config but `perform_ocr_apple()` is called with an empty
+language list, so Vision defaults to English-only. Marked fixed for the
+0.3.x continuous-capture path; our 0.4.50 runs the event-driven path
+(`capture_trigger: visual_change`) and still yields zero Japanese.
+
+**2. Apple Vision language-ordering quirk** (measured directly on the
+saved frames). Even with a correct language list, Vision picks one primary
+script per image based on list order + content. On an English-dominant
+screen:
+
+| `recognitionLanguages` | English check-phrases | Japanese chars | time |
+|---|---|---|---|
+| `["en-US"]` | 5/6, 8/8 | 0 | 0.2–0.4s |
+| `["en-US","ja-JP"]` (en first) | 5/6, 8/8 | **0** | 0.2–0.3s |
+| `["ja-JP","en-US"]` (ja first) | 5/6, **7/8** | 24, 42 | 0.4–0.9s |
+| **`automaticallyDetectsLanguage = true`** | **5/6, 8/8** | **24, 43** | **0.36s** |
+
+So a screenpipe that passed `["en","ja"]` in that order would *still* drop
+the Japanese. Auto-detect is the only setting that keeps full English and
+picks up the Japanese lines.
+
+### screenpipe's English OCR is fine
+
+screenpipe native matched 6/6 and 8/8 English check-phrases on the test
+frames. An earlier impression of "shaky English from Apple Vision" was a
+self-inflicted config (`["ja-JP","en-US"]` + `usesLanguageCorrection`),
+not a real limitation.
+
+### The fix
+
+A single Apple Vision pass with `automaticallyDetectsLanguage = true`,
+`usesLanguageCorrection = true`, `.accurate` — full English + full
+Japanese, ~0.36s/frame. No two-engine merge. This is what
+`scripts/ocr_provider.py` does on macOS.
+
+### Cross-platform
+
+`uniOCR` (screenpipe's OCR layer) already spans Apple Vision / Windows OCR
+/ Tesseract. For our own OCR pass:
+
+| Platform | Engine | Japanese | Notes |
+|---|---|---|---|
+| macOS | Apple Vision, auto-detect | yes | no install, ~0.36s/frame |
+| Windows | `Windows.Media.Ocr` (built in) | yes | free, local, Win10+ |
+| Linux | RapidOCR (PaddleOCR models via ONNX, CPU) or Tesseract `+jpn` | yes | RapidOCR ≈ Paddle accuracy without the 4.5 GB / GPU; Tesseract is the CPU-only floor |
+
+PaddleOCR proper (4.5 GB RAM, wants GPU) and Surya (~290 s/image on CPU)
+are out for on-device use.
+
+### Architecture decision
+
+Keep screenpipe as the **capture + metadata layer** (`browser_url`,
+`window_name`, `focused`, timestamps, storage, the local API — the parts
+it's uniquely good at). Do OCR ourselves via `ocr_provider` on the frames
+screenpipe already saves. Reasons: fixes Japanese now without waiting on
+upstream; per-platform engine choice; a clean abstraction that fits the
+"one general engine, many fields" goal. If screenpipe fixes #2549 +
+adopts auto-detect, the macOS path here becomes redundant and we can
+simplify back to using its OCR directly.
+
+### Reproducing this
+
+- `tests/fixtures/korero_bilingual.json` — a frozen, PII-scrubbed set of
+  frames from the 2026-09-07 session (metadata + screenpipe text +
+  `ocr_provider` text + ground-truth segment labels).
+- `scripts/build_fixture.py` — regenerates a fixture from any screenpipe
+  DB window; auto-scrubs OS-derived identity (user, host, home, full
+  name) and the platform host.
+- `tests/eval_fixture.py` — runs the classifier over a fixture and reports
+  per-segment accuracy. Sub-second iteration, no daemon, no re-capture.
+
+### Faster iteration (process note)
+
+`screenpipe search --content-type ocr --start … --browser-url …` reads
+`~/.screenpipe/db.sqlite` directly with **no daemon** — no more ~25 s
+restarts between test runs. Only the live `--minutes` path needs the
+running server.
