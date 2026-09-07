@@ -1,2 +1,7 @@
 requests
 pillow
+
+# macOS OCR backend (scripts/ocr_provider.py). Installed only on macOS;
+# other platforms use their own backend — see ocr_provider.py.
+pyobjc-framework-Vision; sys_platform == "darwin"
+pyobjc-framework-Quartz; sys_platform == "darwin"
