@@ -19,6 +19,12 @@ often says more about the activity than the visible text — which site,
 which app, whether the user switched to something off-task. Domain-general;
 per-field profiles can add how to read specific URLs (see profiles.py).
 
+--reocr re-runs OCR on each frame image with a local engine (Apple Vision
+on macOS) and merges in text screenpipe's OCR dropped — notably non-Latin
+scripts, which its 0.4.50 build skips entirely (see FINDINGS.md and
+ocr_provider.py). Recommended for bilingual domains; falls back cleanly
+where no local OCR backend is available.
+
 Alongside the text-based label, this also reports plain behavioral signals
 computed straight from screenpipe's capture metadata (app switches, idle
 gaps, repeated/unchanged captures) — no model involved. These are cheap,
@@ -43,12 +49,14 @@ the same underlying data rather than fresh live captures each time, use
 """
 
 import argparse
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
 import requests
 
+import ocr_provider
 from profiles import DEFAULT_PROFILE, PROFILES
 
 SCREENPIPE_API = "http://localhost:3030"
@@ -114,6 +122,7 @@ def fetch_recent_captures(token: str, minutes: int = None, start: str = None, en
                     "timestamp": content.get("timestamp"),
                     "app_name": content.get("app_name") or "unknown",
                     "browser_url": content.get("browser_url") or "",
+                    "file_path": content.get("file_path") or content.get("frame_name") or "",
                     "text": text,
                 })
         if captures:
@@ -145,6 +154,32 @@ def browser_urls(captures: list[dict], limit: int = 5) -> list[str]:
         if url:
             counts[url] = counts.get(url, 0) + 1
     return [u for u, _ in sorted(counts.items(), key=lambda kv: -kv[1])][:limit]
+
+
+def add_reocr(captures: list[dict]) -> int:
+    """Re-OCR each frame image with a local engine and merge in the lines
+    screenpipe's own OCR dropped — notably non-Latin scripts (its 0.4.50
+    build returns English only for e.g. Japanese/English screens). Mutates
+    each capture's "text" in place; returns how many were changed.
+
+    Best-effort: on any backend problem (no macOS Vision, missing pyobjc)
+    it warns once and leaves every capture untouched."""
+    changed = 0
+    for c in captures:
+        path = c.get("file_path") or ""
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            extra = ocr_provider.ocr_image(path)
+        except (NotImplementedError, ImportError) as e:
+            print(f"--reocr unavailable ({e.__class__.__name__}: {e}); "
+                  f"using screenpipe's text as-is", file=sys.stderr)
+            return 0
+        merged = ocr_provider.merge_text(c["text"], extra)
+        if merged != c["text"]:
+            c["text"] = merged
+            changed += 1
+    return changed
 
 
 def compute_signals(captures: list[dict]) -> dict:
@@ -228,6 +263,12 @@ def main():
                          help="Fixed window end (ISO 8601). See --start.")
     parser.add_argument("--profile", type=str, default=DEFAULT_PROFILE, choices=list(PROFILES),
                          help="Label set + classification context to use (see profiles.py).")
+    parser.add_argument("--reocr", action="store_true",
+                         help="Re-OCR each frame image locally and merge in text "
+                              "screenpipe's OCR missed — notably non-Latin scripts "
+                              "(its OCR returns English only). macOS uses Apple "
+                              "Vision; adds ~0.3-1s per frame. Recommended for "
+                              "bilingual domains (e.g. --profile language_acquisition).")
     args = parser.parse_args()
 
     profile = PROFILES[args.profile]
@@ -244,6 +285,11 @@ def main():
         print(f"No screen text captured in the window ({window}). "
               f"Is `screenpipe record` running?")
         sys.exit(1)
+
+    if args.reocr:
+        n = add_reocr(captures)
+        if n:
+            print(f"(re-OCR merged extra text into {n}/{len(captures)} frame(s))\n")
 
     text = dedup_text(captures)
     signals = compute_signals(captures)

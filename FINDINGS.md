@@ -292,8 +292,8 @@ re-OCR**: `language_acquisition` 3/3 (was 1/3 at the start of the
 session). `general` 0/3 — expected, it carries no domain context and is
 the fallback for unrecognised domains; the value is in the field profile.
 
-Not wired in yet: the OCR provider (below) and `compute_signals()`
-app-identity-from-URL (deferred).
+Deferred: `compute_signals()` app-identity-from-URL. (The OCR provider,
+below, is now wired in behind `--reocr`.)
 
 ## OCR layer — root cause and the fix (research pass, 2026-09-07)
 
@@ -360,6 +360,19 @@ upstream; per-platform engine choice; a clean abstraction that fits the
 "one general engine, many fields" goal. If screenpipe fixes #2549 +
 adopts auto-detect, the macOS path here becomes redundant and we can
 simplify back to using its OCR directly.
+
+### Wired in (2026-09-07)
+
+`classify_recent_activity.py --reocr`: for each captured frame, run
+`ocr_provider.ocr_image(file_path)` and `merge_text()` its non-Latin
+lines into screenpipe's text (keeps screenpipe's stronger English +
+accessibility merge, adds the Japanese it drops; ≥2 script chars per line
+so stray CJK glyphs from UI icons don't leak in). Best-effort — a missing
+backend (non-mac, no pyobjc) or missing frame image warns once and leaves
+the text untouched. Verified on the live engine against the saved session:
+the full Polly translation sentence and the Gretel question translations
+now appear in the captured text; `tests/eval_fixture.py` still 6/6 on all
+text sources. Cost ≈ 0.3–1 s/frame on top of the run.
 
 ### Reproducing this
 

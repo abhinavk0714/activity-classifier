@@ -27,12 +27,13 @@ calls, no screenshots sent anywhere, nothing to sign up for.
    small model running locally via [Ollama](https://ollama.com), which
    classifies the activity into one of a fixed set of labels.
 
-`scripts/ocr_provider.py` is an optional second OCR pass over the frames
-screenpipe saves, for when screenpipe's own OCR misses text — notably
-non-Latin scripts (its 0.4.50 build returns English only for mixed
+Pass `--reocr` to add a second OCR pass over the frame images
+(`scripts/ocr_provider.py`), for when screenpipe's own OCR misses text —
+notably non-Latin scripts (its 0.4.50 build returns English only for mixed
 Japanese/English screens). It uses the best local engine per platform
-(Apple Vision on macOS; Windows OCR / Tesseract elsewhere). See
-FINDINGS.md.
+(Apple Vision on macOS; Windows OCR / Tesseract elsewhere), merges in the
+lines screenpipe dropped, and falls back cleanly where no local backend is
+available. Recommended for bilingual domains. See FINDINGS.md.
 
 ### Why text, not vision
 
@@ -69,6 +70,8 @@ pip install -r requirements.txt
 3. From the repo root:
    ```bash
    python scripts/classify_recent_activity.py --minutes 5
+   # bilingual screens (e.g. a Japanese tutor's feedback): add --reocr
+   python scripts/classify_recent_activity.py --minutes 5 --profile language_acquisition --reocr
    ```
 
 This pulls the last N minutes of captured text, prints a preview of it,
