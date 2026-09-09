@@ -53,6 +53,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import requests
 
@@ -217,6 +218,19 @@ def add_reocr(captures: list[dict]) -> int:
     return changed
 
 
+def app_identity(c: dict) -> str:
+    """A meaningful "which app" string for a capture. For browser tabs
+    app_name is always just "Google Chrome" / "Safari" etc., which hides
+    switching between two sites (e.g. Kōrero <-> a translator) — so use the
+    site host instead when there's a browser_url."""
+    url = c.get("browser_url") or ""
+    if url:
+        host = urlparse(url).netloc
+        if host:
+            return host
+    return c.get("app_name") or "unknown"
+
+
 def compute_signals(captures: list[dict]) -> dict:
     """Plain behavioral signals from capture metadata — no model involved.
     Cheap and domain-general: catches things the text alone tends to miss,
@@ -225,7 +239,7 @@ def compute_signals(captures: list[dict]) -> dict:
         return {}
 
     timestamps = [datetime.fromisoformat(c["timestamp"]) for c in captures]
-    apps = [c["app_name"] for c in captures]
+    apps = [app_identity(c) for c in captures]
 
     gaps = [(b - a).total_seconds() for a, b in zip(timestamps, timestamps[1:])]
     app_switches = sum(1 for a, b in zip(apps, apps[1:]) if a != b)
