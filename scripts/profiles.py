@@ -9,9 +9,40 @@ below, not by editing the engine.
 
 Add a new field: add a "labels" list and a "context" string (can be ""),
 then run with --profile <your_key>.
+
+A profile may also define "extract_state": a function text -> dict pulling
+structured per-frame state (a question number, a score, hint level) that
+the sequence-level stuck pass groups frames by and watches for progress.
+This is domain-specific screen-scraping, so it lives here, not the engine.
 """
 
+import re
+
 DEFAULT_PROFILE = "general"
+
+
+def _language_acquisition_state(text: str) -> dict:
+    """Pull the on-screen progress markers a grammar/vocab drill shows.
+    Tuned to Kōrero's Gretel/Scotty UI; absent markers just come back None.
+    'Question 3/5' + 'Correct: 2' stalling across frames = wheel-spinning."""
+    state: dict = {}
+
+    m = re.search(r"Question\s+(\d+)\s*/\s*(\d+)", text)
+    if m:
+        state["question"] = f"{m.group(1)}/{m.group(2)}"
+
+    m = re.search(r"Correct:?\s*(\d+)", text)
+    if m:
+        state["score"] = int(m.group(1))
+
+    # the drill's hint button escalates Hint -> More Hint when the learner
+    # asks again; "More Hint" showing means they've already asked once
+    if "More Hint" in text:
+        state["hint_level"] = 2
+    elif "Hint" in text:
+        state["hint_level"] = 1
+
+    return state
 
 PROFILES = {
     "general": {
@@ -64,5 +95,6 @@ PROFILES = {
             "(vocab_lookup); /sevi simplifies reading passages "
             "(reading_feedback); /nexus is the app-chooser home screen."
         ),
+        "extract_state": _language_acquisition_state,
     },
 }
