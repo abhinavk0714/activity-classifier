@@ -5,8 +5,9 @@ Iterating on the classifier by re-running screenpipe sessions is slow
 in well under a second — no daemon, no re-capture.
 
 Each fixture frame carries: relative timestamp, ground-truth segment label,
-`browser_url`, `window_name`, `focused`, screenpipe's own OCR text, and a
-fresh `ocr_provider` pass (which recovers non-Latin text screenpipe drops).
+`browser_url`, `window_name`, `focused`, `capture_trigger`, `content_hash`,
+`simhash`, screenpipe's own OCR text, and a fresh `ocr_provider` pass
+(which recovers non-Latin text screenpipe drops).
 
 PII: text and URLs are scrubbed. Auto-removed: the OS user name, host
 name, home directory, and the full name from the passwd GECOS field.
@@ -113,11 +114,12 @@ def main() -> None:
     for seg in segments:
         rows = db.execute(
             "SELECT timestamp, coalesce(browser_url,''), coalesce(window_name,''), "
-            "coalesce(focused,0), coalesce(full_text,''), snapshot_path "
+            "coalesce(focused,0), coalesce(full_text,''), snapshot_path, "
+            "coalesce(capture_trigger,''), content_hash, simhash "
             "FROM frames WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
             (seg["start"].replace("Z", "+00:00"), seg["end"].replace("Z", "+00:00")),
         ).fetchall()
-        for ts, url, win, focused, sp_text, snap in rows:
+        for ts, url, win, focused, sp_text, snap, trigger, chash, shash in rows:
             if url_filter and url_filter not in url:
                 continue
             n += 1
@@ -137,6 +139,9 @@ def main() -> None:
                 "browser_url": scrub(url),
                 "window_name": scrub(win),
                 "focused": bool(focused),
+                "capture_trigger": trigger,
+                "content_hash": chash,
+                "simhash": shash,
                 "screenpipe_text": scrub(sp_text),
                 "ocr_text": scrub(ocr_text),
             })

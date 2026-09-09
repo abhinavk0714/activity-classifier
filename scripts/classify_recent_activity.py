@@ -123,6 +123,11 @@ def fetch_recent_captures(token: str, minutes: int = None, start: str = None, en
                     "app_name": content.get("app_name") or "unknown",
                     "browser_url": content.get("browser_url") or "",
                     "file_path": content.get("file_path") or content.get("frame_name") or "",
+                    # ocr responses call it frame_id, accessibility ones call it id
+                    "frame_id": content.get("frame_id") or content.get("id"),
+                    # why the frame was captured: visual_change / typing_pause /
+                    # idle / window_focus / ... — a sequence-level signal
+                    "capture_trigger": content.get("event_source") or "",
                     "text": text,
                 })
         if captures:
@@ -130,7 +135,36 @@ def fetch_recent_captures(token: str, minutes: int = None, start: str = None, en
             break
 
     captures.sort(key=lambda c: c["timestamp"] or "")
+    add_frame_hashes(captures, headers)
     return captures
+
+
+def add_frame_hashes(captures: list[dict], headers: dict) -> None:
+    """Attach each frame's content_hash + simhash (not exposed by /search)
+    via the daemon's /raw_sql endpoint. Best-effort: on any failure the
+    keys are simply absent. simhash lets the sequence pass tell "same
+    screen, retrying" from real progress; content_hash is an exact-dup key."""
+    ids = [c["frame_id"] for c in captures if c.get("frame_id")]
+    if not ids:
+        return
+    id_list = ",".join(str(int(i)) for i in ids)
+    try:
+        resp = requests.post(
+            f"{SCREENPIPE_API}/raw_sql",
+            headers=headers,
+            json={"query": f"SELECT id, content_hash, simhash FROM frames "
+                           f"WHERE id IN ({id_list}) LIMIT {len(ids)}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        rows = {r["id"]: r for r in resp.json()}
+    except (requests.RequestException, ValueError, KeyError):
+        return
+    for c in captures:
+        row = rows.get(c.get("frame_id"))
+        if row:
+            c["content_hash"] = row.get("content_hash")
+            c["simhash"] = row.get("simhash")
 
 
 def dedup_text(captures: list[dict]) -> str:
