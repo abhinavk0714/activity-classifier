@@ -58,6 +58,7 @@ import requests
 
 import ocr_provider
 from profiles import DEFAULT_PROFILE, PROFILES
+from stuck import detect_stuck, format_findings
 
 SCREENPIPE_API = "http://localhost:3030"
 OLLAMA_API = "http://localhost:11434"
@@ -342,6 +343,11 @@ def main():
 
     label = classify(text, profile["labels"], profile["context"], signals_text, urls)
     print(f"Classification ({args.profile}): {label}")
+
+    findings = detect_stuck(captures, profile)
+    if findings:
+        print("\nStuck episodes:")
+        print(format_findings(findings))
 
 
 if __name__ == "__main__":

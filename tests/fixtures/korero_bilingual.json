@@ -29,6 +29,21 @@
       "note": "retest, Polly"
     }
   ],
+  "stuck_episodes": [
+    {
+      "question": "3/5",
+      "url_contains": "gretel",
+      "flavour": "hint-reliant",
+      "note": "deliberate wheel-spin: score stalled at 2, hint escalated Hint->More Hint, then skipped to 4/5"
+    }
+  ],
+  "stuck_episodes_borderline": [
+    {
+      "question": "1/10",
+      "url_contains": "gretel",
+      "note": "retest segment, ~127s on one question, score 0, no hint escalation. Likely the tester setting up a screenshot, not a real stall. Not expected to flag; revisit with real session data."
+    }
+  ],
   "frames": [
     {
       "n": 1,
