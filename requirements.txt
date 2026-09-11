@@ -5,3 +5,10 @@ pillow
 # other platforms use their own backend — see ocr_provider.py.
 pyobjc-framework-Vision; sys_platform == "darwin"
 pyobjc-framework-Quartz; sys_platform == "darwin"
+
+# Non-macOS OCR backends for --reocr are optional and NOT pinned here
+# (only one is needed, and choice depends on the machine):
+#   Windows: pip install winsdk           (Windows.Media.Ocr; add JA language pack)
+#   any:     pip install rapidocr-onnxruntime
+#            (English+Chinese by default; set OCR_RAPIDOCR_REC_MODEL for Japanese)
+#   any:     pip install pytesseract      (needs the tesseract binary + 'jpn' data)
