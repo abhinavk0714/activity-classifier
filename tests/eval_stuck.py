@@ -47,6 +47,7 @@ def main() -> None:
     profile = PROFILES[args.profile]
     frames = fixture["frames"]
     expected = fixture.get("stuck_episodes", [])
+    not_expected = fixture.get("not_stuck_episodes", [])
 
     # the fixture stores relative offsets; rebuild absolute timestamps so
     # detect_stuck sees real dwell times
@@ -59,6 +60,9 @@ def main() -> None:
     } for f in frames]
 
     findings = detect_stuck(captures, profile)
+    for f in findings:
+        f["_t_from"] = (datetime.fromisoformat(f["t_start"]) - base).total_seconds()
+        f["_t_to"] = (datetime.fromisoformat(f["t_end"]) - base).total_seconds()
 
     print(f"fixture: {args.fixture.name}  ({len(frames)} frames)")
     print(f"profile: {args.profile}   text-source: {args.text_source}\n")
@@ -67,29 +71,53 @@ def main() -> None:
     print(format_findings(findings) or "  (none)")
     print()
 
-    found_q = {f["question"] for f in findings}
-    exp_q = {e["question"] for e in expected}
+    def matches(e: dict, f: dict) -> bool:
+        if e["question"] != f["question"]:
+            return False
+        # ground truth without a time window: question-only match (older
+        # fixtures, or a question number that only ever appears once)
+        if "t_from" not in e:
+            return True
+        return f["_t_from"] <= e["t_to"] and f["_t_to"] >= e["t_from"]
 
-    missed = exp_q - found_q
-    spurious = found_q - exp_q
-
+    ok = True
+    matched_findings = set()
+    hits = 0
     for e in expected:
-        mark = "OK " if e["question"] in found_q else "XX "
-        print(f"  {mark} expect stuck on {e['question']:6s}  ({e['note'][:60]})")
-    for q in sorted(spurious):
-        print(f"  XX unexpected stuck finding on {q}")
-
-    ok = not missed and not spurious
-    # flavour check (only when the episode was found and ground truth names one)
-    for e in expected:
-        if e["question"] in found_q and "flavour" in e:
-            got = next(f["flavour"] for f in findings if f["question"] == e["question"])
-            if got != e["flavour"]:
+        hit = next((f for f in findings if matches(e, f)), None)
+        mark = "OK " if hit else "XX "
+        if not hit:
+            ok = False
+        else:
+            hits += 1
+            matched_findings.add(id(hit))
+            if "flavour" in e and hit["flavour"] != e["flavour"]:
                 ok = False
-                print(f"  XX {e['question']}: flavour {got!r} != expected {e['flavour']!r}")
+                mark = "XX "
+            if "resolved" in e and hit["resolved"] != e["resolved"]:
+                ok = False
+                mark = "XX "
+        print(f"  {mark} expect     stuck on {e['question']:6s}  ({e['note'][:70]})")
+
+    false_positives = 0
+    for e in not_expected:
+        hit = next((f for f in findings if matches(e, f)), None)
+        mark = "XX " if hit else "OK "
+        if hit:
+            ok = False
+            false_positives += 1
+            matched_findings.add(id(hit))
+        print(f"  {mark} expect NOT stuck on {e['question']:6s}  ({e['note'][:70]})")
+
+    unexplained = [f for f in findings if id(f) not in matched_findings]
+    for f in unexplained:
+        ok = False
+        print(f"  XX unexplained stuck finding on {f['question']} "
+              f"(~{f['dwell_s']}s, t={f['_t_from']:.0f}-{f['_t_to']:.0f}s)")
 
     print(f"\n  {'PASS' if ok else 'FAIL'}  "
-          f"({len(exp_q & found_q)}/{len(exp_q)} expected, {len(spurious)} spurious)")
+          f"({hits}/{len(expected)} expected, "
+          f"{false_positives} false-positive, {len(unexplained)} unexplained)")
     sys.exit(0 if ok else 1)
 
 

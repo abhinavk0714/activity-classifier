@@ -15,13 +15,31 @@ it clear.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
-# thresholds. Provisional — calibrated against a single deliberate
-# wheel-spin episode in tests/fixtures/korero_bilingual (~111s, score
-# stalled at 2, hint escalated Hint->More Hint). Revisit once there are
-# contrasting ground-truthed sessions (NOTES.md Priority 2 step 4): the
-# "long dwell, no escalation" path especially is a guess.
+# thresholds. Calibrated against two ground-truthed fixtures (see
+# tests/fixtures/korero_bilingual.json, korero_stuck.json — the latter
+# from three contrasting Gretel drills recorded 2026-09-11, NOTES.md
+# Priority 2 step 4):
+#   - deliberate wheel-spin, ~111s on Q3/5, hint escalated, resolved only
+#     by hitting Skip (score never moved)          -> stuck
+#   - a genuinely hard question, ~112s on Q3/5, hint escalated, resolved
+#     by eventually answering correctly            -> ALSO stuck
+#   - a real stall, ~202s on Q3/5, hint escalated, never resolved (gave
+#     up and navigated away)                       -> stuck
+#   - a borderline stretch, ~127s on Q1/10, score flat but NO hint
+#     escalation (likely a screenshot-setup artifact, not real struggle)
+#     -> not stuck
+#   - fluent sessions never accumulate 3+ frames on one question at
+#     screenpipe's ~40-60s browser-capture cadence -> no episode at all
+# The two ~110s "resolved" cases above are text-indistinguishable at that
+# capture cadence — one gave up (skip), the other got there in the end —
+# so both get flagged; `resolved` on the finding (question number moved
+# on afterwards) is carried through as context for the story/narrative
+# pass rather than used to suppress the finding. Suppressing on
+# `resolved` was tried and rejected: it silently un-flagged the
+# already-ground-truthed wheel-spin case above.
 _MIN_DWELL_S = 90          # nothing shorter is worth a finding
 _LONG_DWELL_S = 150        # long enough to flag even without hint escalation
 _MIN_EPISODE_FRAMES = 3    # need a real run of frames on one question
@@ -62,7 +80,13 @@ def _episodes(captures: list[dict], extract_state) -> list[dict]:
     return episodes
 
 
-def _analyse(ep: dict) -> dict:
+def _question_num(question: str) -> int | None:
+    """'3/5' -> 3. None if unparseable."""
+    m = re.match(r"\s*(\d+)\s*/\s*(\d+)", question or "")
+    return int(m.group(1)) if m else None
+
+
+def _analyse(ep: dict, next_question: str | None) -> dict:
     frames = ep["frames"]
     question, url = ep["key"]
     t0, t1 = frames[0][0], frames[-1][0]
@@ -75,14 +99,25 @@ def _analyse(ep: dict) -> dict:
     hint_max = max(hints) if hints else 0
     hint_escalated = bool(hints) and hints[-1] > hints[0]
 
+    # "resolved" = the drill moved on to a later question right after this
+    # episode (whether by answering correctly or by skipping). Doesn't
+    # gate _is_stuck — see the threshold comment above for why — but
+    # tells the story whether the stall ended or was still ongoing.
+    here = _question_num(question)
+    nxt = _question_num(next_question) if next_question else None
+    resolved = here is not None and nxt is not None and nxt > here
+
     return {
         "question": question,
         "url": url,
+        "t_start": t0.isoformat(),
+        "t_end": t1.isoformat(),
         "dwell_s": round(dwell),
         "frames": len(frames),
         "score_delta": score_delta,
         "hint_max": hint_max,
         "hint_escalated": hint_escalated,
+        "resolved": resolved,
     }
 
 
@@ -115,6 +150,10 @@ def _summary(a: dict) -> tuple[str, str]:
     parts = [f"stuck on question {a['question']} for ~{dur}", score_clause]
     if hint_clause:
         parts.append(hint_clause)
+    # "resolved" only means the drill moved on to a later question — that
+    # covers answering correctly on a later try AND giving up via Skip, so
+    # this doesn't claim the learner succeeded, only that the stall ended
+    parts.append("moved on afterwards" if a["resolved"] else "still stuck when last seen")
     return flavour, "; ".join(parts)
 
 
@@ -126,9 +165,11 @@ def detect_stuck(captures: list[dict], profile: dict) -> list[dict]:
     if not extract_state or len(captures) < _MIN_EPISODE_FRAMES:
         return []
 
+    episodes = _episodes(captures, extract_state)
     findings = []
-    for ep in _episodes(captures, extract_state):
-        a = _analyse(ep)
+    for i, ep in enumerate(episodes):
+        next_question = episodes[i + 1]["key"][0] if i + 1 < len(episodes) else None
+        a = _analyse(ep, next_question)
         if _is_stuck(a):
             flavour, summary = _summary(a)
             a["flavour"] = flavour
