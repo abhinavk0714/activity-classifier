@@ -350,6 +350,16 @@ Japanese, ~0.36s/frame. No two-engine merge. This is what
 PaddleOCR proper (4.5 GB RAM, wants GPU) and Surya (~290 s/image on CPU)
 are out for on-device use.
 
+**Implemented 2026-09-10.** `ocr_provider.py` now resolves a non-macOS
+backend by availability, in this order: Windows.Media.Ocr (`pip install
+winsdk`, uses installed language packs) → RapidOCR (`rapidocr-onnxruntime`;
+English+Chinese rec model by default, point `OCR_RAPIDOCR_REC_MODEL` at a
+`japan_PP-OCRv*_rec` ONNX for Japanese) → Tesseract (`pytesseract` + the
+`tesseract` binary with `jpn` traineddata; falls back to English-only if
+`jpn` is absent). The engine is built once and cached. These paths follow
+each library's documented API but have not run on a Windows/Linux box yet
+— macOS (Apple Vision) is still the only tested path.
+
 ### Architecture decision
 
 Keep screenpipe as the **capture + metadata layer** (`browser_url`,
