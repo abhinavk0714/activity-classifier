@@ -37,13 +37,6 @@
       "note": "deliberate wheel-spin: score stalled at 2, hint escalated Hint->More Hint, then skipped to 4/5"
     }
   ],
-  "stuck_episodes_borderline": [
-    {
-      "question": "1/10",
-      "url_contains": "gretel",
-      "note": "retest segment, ~127s on one question, score 0, no hint escalation. Likely the tester setting up a screenshot, not a real stall. Not expected to flag; revisit with real session data."
-    }
-  ],
   "frames": [
     {
       "n": 1,
@@ -562,6 +555,13 @@
       "simhash": -1545274533804029461,
       "screenpipe_text": "Tab Search\nKōrero Nexus - Memory usage - 199 MB\nClose\nGradio - Memory usage - 116 MB\nClose\nGretel - Memory usage - 252 MB\nClose\nGretel - Memory usage - 232 MB\nClose\nGretel - Memory usage - 105 MB\nClose\nNew Tab\nOpen Gemini in Chrome\n→88CanvasKörero Nexus6 Gradiokorero.example/korero/polly/& GretelGretelXGretel+*• Ask GeminigPolly Porpoise ЭOptionsEnglishI have been learning English for five years and I want to study abroad nextyear.ClearExplainTranslatedeExplain",
       "ocr_text": "Chrome\nFile\nN\nEdit\nView\nHistory\nBookmarks\nProfiles\nKorero Nexus\nGradio\nkorero.example/korero/polly/\nTab\nWindow\nHelp\nUS\n* 55% B\nGretel\nGretel\nGretel\n+\nMon Sep 7 5:12 PM\nAsk Gemini\n★\n㗊\nCanvas\nPolly Porpoise\nOptions\nEnglish\n日本語\nI have been learning English for five years and I want to study abroad next\n私は5年間英語を学んでおり、来年留学したいと思っています。\nyear.\nClear\nExplain\nTranslate\nExplain"
+    }
+  ],
+  "not_stuck_episodes": [
+    {
+      "question": "1/10",
+      "url_contains": "gretel",
+      "note": "retest segment, ~127s on one question, score 0, no hint escalation. Likely the tester setting up a screenshot, not a real stall. Not expected to flag; revisit with real session data."
     }
   ]
 }
