@@ -5,3 +5,4 @@ __pycache__/
 annotated/
 NOTES.md
 scripts/scrub.local
+tests/fixtures/
