@@ -139,7 +139,10 @@ python tests/eval_fixture.py --fixture my_fixture.json --profile language_acquis
 
 `build_fixture.py` scrubs PII (OS user/host/home/full name, plus a
 per-spec host anonymisation and an optional gitignored `scrub.local`).
-`tests/fixtures/korero_bilingual.json` is a checked-in example.
+Fixtures live under `tests/fixtures/`, which is gitignored — they're built
+from a real recording of whatever site/app you're testing against, so
+they're kept local rather than checked in. Build your own with
+`build_fixture.py` against a live screenpipe recording.
 `screenpipe search --content-type ocr --start … --end …` reads the local
 DB directly, no daemon — handy for poking at captured data.
 
@@ -155,7 +158,8 @@ scripts/
   annotate_captures.py          stamps classifier output onto real captured screenshots
 tests/
   eval_fixture.py               run the classifier over a fixture, report accuracy
-  fixtures/                     checked-in example fixture + its build spec
+  eval_stuck.py                 run the stuck-detection pass over a fixture, report accuracy
+  fixtures/                     gitignored — build your own fixture + spec locally
 FINDINGS.md                     methodology and results
 requirements.txt
 LICENSE
