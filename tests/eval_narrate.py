@@ -1,8 +1,8 @@
 """Print the LLM narrative for each stuck-detection finding in a fixture.
 
 No pass/fail — narrative quality needs a human read, not exact-match
-grading (see NOTES.md: this is the acknowledged tradeoff of adding an LLM
-pass on top of the deterministic rules). Decoding is deterministic
+grading. This is the acknowledged tradeoff of adding an LLM pass on top
+of the deterministic rules. Decoding is deterministic
 (temperature=0, same as classify()), so a rerun that produces a different
 narrative for the same finding means something upstream moved (the text
 pipeline, the fixture, the prompt) — read this as a stability check as
