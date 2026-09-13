@@ -14,11 +14,19 @@ A profile may also define "extract_state": a function text -> dict pulling
 structured per-frame state (a question number, a score, hint level) that
 the sequence-level stuck pass groups frames by and watches for progress.
 This is domain-specific screen-scraping, so it lives here, not the engine.
+
+A profile with "extract_state" may also define "content_start": a function
+text -> int | None returning where real content begins in the text (the
+same anchor extract_state searches for), used by narrate.py to crop
+browser furniture before it without having to name what a given user's
+furniture contains (bookmarks, extensions — all user-specific).
 """
 
 import re
 
 DEFAULT_PROFILE = "general"
+
+_QUESTION_RE = re.compile(r"Question\s+(\d+)\s*/\s*(\d+)")
 
 
 def _language_acquisition_state(text: str) -> dict:
@@ -27,7 +35,7 @@ def _language_acquisition_state(text: str) -> dict:
     'Question 3/5' + 'Correct: 2' stalling across frames = wheel-spinning."""
     state: dict = {}
 
-    m = re.search(r"Question\s+(\d+)\s*/\s*(\d+)", text)
+    m = _QUESTION_RE.search(text)
     if m:
         state["question"] = f"{m.group(1)}/{m.group(2)}"
 
@@ -43,6 +51,16 @@ def _language_acquisition_state(text: str) -> dict:
         state["hint_level"] = 1
 
     return state
+
+
+def _language_acquisition_content_start(text: str) -> int | None:
+    """Index where real question content begins, or None if this frame has
+    none. Everything before it is browser furniture — tabs, bookmarks,
+    toolbars — cropped generically by position rather than by naming
+    whatever a given user happens to have (a bookmark bar entry, an
+    extension icon) since that varies per user and can't be listed."""
+    m = _QUESTION_RE.search(text)
+    return m.start() if m else None
 
 PROFILES = {
     "general": {
@@ -96,5 +114,6 @@ PROFILES = {
             "(reading_feedback); /nexus is the app-chooser home screen."
         ),
         "extract_state": _language_acquisition_state,
+        "content_start": _language_acquisition_content_start,
     },
 }

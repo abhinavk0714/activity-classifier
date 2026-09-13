@@ -106,13 +106,35 @@ engine.
 ### On "stuck"
 
 Earlier versions had a `confused_or_stuck` label. It was dropped: whether
-a learner is stuck is a *temporal* question — same screen for a long time,
-repeated failed attempts at one question, escalating hint use — not
-something a single-frame classifier should compete over. A frame of a
-learner re-reading feedback for the fifth time still shows *grammar
-practice*; the struggle is only visible across the ordered sequence of
-frames plus their timestamps. That sequence-level pass is future work; the
-base labels come first.
+a learner is stuck is a *sequence-level* question, not something a
+single-frame classifier should compete over. A frame of a learner
+re-reading feedback for the fifth time still shows *grammar practice*; the
+struggle is only visible across an ordered run of frames.
+
+That sequence-level pass is `scripts/stuck.py`'s `detect_stuck()` — purely
+structural, no model involved. It reads whatever a profile's
+`extract_state()` pulls out per frame (a question id, a score, a hint
+level) and looks for *unresolved* items: was this question ever credited,
+inferred from the cumulative score crossing a boundary. Consecutive
+unresolved items form a streak; a streak is flagged as stuck on escalated
+hint use or on 2+ unresolved items in a row. Calibrated against a real
+human-driven recording — see NOTES.md — after an earlier wall-clock-dwell
+version turned out to assume the wrong thing (that a stuck student sits on
+one question; the real app advances the question on every submission,
+right or wrong).
+
+On top of that, `scripts/narrate.py` adds an opt-in (`--narrate-stuck`)
+LLM pass: one Ollama call *per already-flagged finding*, given that
+finding's verified facts plus the real screen text from its time window,
+to describe *what* the student was struggling with — something the rules
+can't see, since they never read content. The gate matters: this never
+runs on stretches the rules didn't already confirm as stuck, so a
+hallucinated detail can embellish a real episode but can't invent one.
+Text, not images, for the same reason the base classifier avoids vision
+models (see above). Browser furniture (tabs, bookmarks, extensions) is
+cropped by *position* — everything before a profile's `content_start`
+anchor — rather than by naming what a specific user's browser happens to
+contain.
 
 ## Behavioral signals
 
@@ -154,11 +176,14 @@ scripts/
   profiles.py                   label sets + context per domain (add a field here)
   ocr_provider.py               optional per-platform OCR pass over saved frames
   build_fixture.py              freeze a screenpipe window into a test fixture
+  stuck.py                      sequence-level "stuck" detection (see "On stuck" below)
+  narrate.py                    opt-in LLM narrative pass over already-flagged episodes
   model_comparison.py           the model comparison behind FINDINGS.md (older run)
   annotate_captures.py          stamps classifier output onto real captured screenshots
 tests/
   eval_fixture.py               run the classifier over a fixture, report accuracy
   eval_stuck.py                 run the stuck-detection pass over a fixture, report accuracy
+  eval_narrate.py               print the narrative pass's output over a fixture's findings
   fixtures/                     gitignored — build your own fixture + spec locally
 FINDINGS.md                     methodology and results
 requirements.txt
