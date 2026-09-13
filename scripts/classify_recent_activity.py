@@ -318,6 +318,12 @@ def main():
                               "(its OCR returns English only). macOS uses Apple "
                               "Vision; adds ~0.3-1s per frame. Recommended for "
                               "bilingual domains (e.g. --profile language_acquisition).")
+    parser.add_argument("--narrate-stuck", action="store_true",
+                         help="For each stuck episode found, make one extra Ollama "
+                              "call (see narrate.py) describing specifically what "
+                              "the student was struggling with. Opt-in: only runs "
+                              "on already-flagged episodes, but is an extra "
+                              "round-trip per finding.")
     args = parser.parse_args()
 
     profile = PROFILES[args.profile]
@@ -361,7 +367,14 @@ def main():
     findings = detect_stuck(captures, profile)
     if findings:
         print("\nStuck episodes:")
-        print(format_findings(findings))
+        if args.narrate_stuck:
+            import narrate
+            narrate.add_narratives(findings, captures, profile)
+            for f in findings:
+                print(f"  - [{f['flavour']}] {f['summary']}")
+                print(f"      detail: {f['narrative']}")
+        else:
+            print(format_findings(findings))
 
 
 if __name__ == "__main__":
