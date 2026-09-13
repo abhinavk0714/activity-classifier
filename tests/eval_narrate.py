@@ -24,6 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from classify_recent_activity import add_episode_signals  # noqa: E402
 from narrate import add_narratives  # noqa: E402
 from ocr_provider import merge_text  # noqa: E402
 from profiles import PROFILES  # noqa: E402
@@ -68,10 +69,9 @@ def main() -> None:
         print("(no stuck episodes found — nothing to narrate)")
         return
 
+    add_episode_signals(findings, captures)
     add_narratives(findings, captures, profile)
-    for f in findings:
-        print(f"  - [{f['flavour']}] {f['summary']}")
-        print(f"      detail: {f['narrative']}\n")
+    print(format_findings(findings))
 
 
 if __name__ == "__main__":
