@@ -47,6 +47,21 @@ def _question_num(question: str | None) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def episode_captures(finding: dict, captures: list[dict]) -> list[dict]:
+    """The full slice of captures spanning this finding's time window — not
+    just the question-bearing frames detect_stuck grouped on, but everything
+    in between (e.g. a brief tab-switch mid-stall). Shared by callers that
+    need an episode's raw text/metadata (narrate.py) or that want plain
+    behavioral signals scoped to just this stretch (compute_signals(),
+    which lives in classify_recent_activity.py — this only slices the
+    captures; it doesn't compute anything itself, so it doesn't need that
+    module's other domain-specific bits, avoiding a circular import)."""
+    t0 = datetime.fromisoformat(finding["t_start"])
+    t1 = datetime.fromisoformat(finding["t_end"])
+    return [c for c in captures
+            if t0 <= datetime.fromisoformat(c["timestamp"]) <= t1]
+
+
 def _group_items(captures: list[dict], extract_state) -> list[dict]:
     """Group consecutive frames sharing the same (question, url) into one
     "item attempt". Frames with no question are ignored (they neither
@@ -232,6 +247,24 @@ def detect_stuck(captures: list[dict], profile: dict) -> list[dict]:
 
 
 def format_findings(findings: list[dict]) -> str:
+    """Renders each finding's rule-based summary, plus a 'signals:' line if
+    the caller attached one (classify_recent_activity.py's
+    add_episode_signals) and a 'detail:' line if it attached a narrative
+    (narrate.py's add_narratives) — both purely descriptive, computed
+    elsewhere; stuck.py only displays them here if present, so both stay
+    optional and this remains the single place finding output is rendered."""
     if not findings:
         return ""
-    return "\n".join(f"  - [{f['flavour']}] {f['summary']}" for f in findings)
+    lines = []
+    for f in findings:
+        lines.append(f"  - [{f['flavour']}] {f['summary']}")
+        sig = f.get("signals")
+        if sig:
+            apps = ", ".join(sig["distinct_apps"])
+            lines.append(
+                f"      signals: {sig['app_switches']} app switch(es) among "
+                f"[{apps}]; {sig['repeat_ratio']:.0%} unchanged-repeat frames"
+            )
+        if f.get("narrative"):
+            lines.append(f"      detail: {f['narrative']}")
+    return "\n".join(lines)

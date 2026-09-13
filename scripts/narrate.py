@@ -21,11 +21,10 @@ closed problem for no benefit.
 """
 from __future__ import annotations
 
-from datetime import datetime
-
 import requests
 
 from classify_recent_activity import OLLAMA_API, OLLAMA_MODEL, dedup_text
+from stuck import episode_captures
 
 _SINGLE_ASK = (
     "Write ONE short sentence for a teacher describing what this specific "
@@ -60,14 +59,6 @@ NARRATE_PROMPT = (
 )
 
 
-def _episode_captures(finding: dict, captures: list[dict]) -> list[dict]:
-    """The subset of captures falling inside this finding's time window."""
-    t0 = datetime.fromisoformat(finding["t_start"])
-    t1 = datetime.fromisoformat(finding["t_end"])
-    return [c for c in captures
-            if t0 <= datetime.fromisoformat(c["timestamp"]) <= t1]
-
-
 def _facts_block(finding: dict) -> str:
     qs = finding["questions"]
     where = qs[0] if len(qs) == 1 else f"{qs[0]} through {qs[-1]} ({len(qs)} questions)"
@@ -79,13 +70,25 @@ def _facts_block(finding: dict) -> str:
         hint = "no hint was shown"
     outcome = ("the drill moved on afterwards" if finding["resolved"]
                else "still stuck when the recording ended")
-    return (
+    facts = (
         f"- Question(s) involved: {where}\n"
         f"- Time spent: ~{finding['dwell_s']}s\n"
         f"- Hint use: {hint}\n"
         f"- None of these questions were answered correctly during this stretch\n"
         f"- Outcome: {outcome}"
     )
+
+    # if classify_recent_activity.py's add_episode_signals already attached
+    # plain behavioral signals for this stretch, fold in the ones a teacher
+    # narrative benefits from — e.g. tabbing away to another site mid-stall
+    sig = finding.get("signals")
+    if sig and sig.get("app_switches"):
+        others = [a for a in sig["distinct_apps"]]
+        facts += (
+            f"\n- Also switched between {len(others)} site(s)/app(s) during "
+            f"this stretch: {', '.join(others)}"
+        )
+    return facts
 
 
 # Chrome's own built-in text-selection context menu — a fixed browser
@@ -118,7 +121,7 @@ def narrate_episode(finding: dict, captures: list[dict], profile: dict) -> str:
     """One Ollama call describing what a single already-flagged episode was
     about, using only that episode's own screen text. Deterministic decoding
     (same as classify()) so reruns are stable."""
-    eps_caps = _crop_to_content(_episode_captures(finding, captures), profile)
+    eps_caps = _crop_to_content(episode_captures(finding, captures), profile)
     text = dedup_text(eps_caps)[:3000]
     if not text.strip():
         return "unclear from screen text"

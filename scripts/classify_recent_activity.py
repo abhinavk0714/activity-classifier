@@ -59,7 +59,7 @@ import requests
 
 import ocr_provider
 from profiles import DEFAULT_PROFILE, PROFILES
-from stuck import detect_stuck, format_findings
+from stuck import detect_stuck, episode_captures, format_findings
 
 SCREENPIPE_API = "http://localhost:3030"
 OLLAMA_API = "http://localhost:11434"
@@ -240,6 +240,12 @@ def compute_signals(captures: list[dict]) -> dict:
 
     timestamps = [datetime.fromisoformat(c["timestamp"]) for c in captures]
     apps = [app_identity(c) for c in captures]
+    # a capture with no browser_url and no app_name is usually a
+    # page-transition blip, not a real switch to some "unknown" app —
+    # same leniency stuck.py's grouping already gives an empty url
+    for i in range(1, len(apps)):
+        if apps[i] == "unknown":
+            apps[i] = apps[i - 1]
 
     gaps = [(b - a).total_seconds() for a, b in zip(timestamps, timestamps[1:])]
     app_switches = sum(1 for a, b in zip(apps, apps[1:]) if a != b)
@@ -253,6 +259,18 @@ def compute_signals(captures: list[dict]) -> dict:
         "longest_gap_seconds": round(max(gaps)) if gaps else 0,
         "repeat_ratio": round(repeats / (len(captures) - 1), 2),
     }
+
+
+def add_episode_signals(findings: list[dict], captures: list[dict]) -> None:
+    """Attach compute_signals()-style behavioral context to each stuck
+    finding, scoped to just that episode's own time window (not the whole
+    session). Folds the earlier separate "per-episode compute_signals
+    rework" idea into what stuck.py already tracks, reusing the exact same
+    function against a more precisely-scoped slice, rather than computing
+    overlapping metrics twice. A no-op per finding if that slice is too
+    short for compute_signals to say anything (fewer than 2 captures)."""
+    for f in findings:
+        f["signals"] = compute_signals(episode_captures(f, captures))
 
 
 def format_signals(signals: dict) -> str:
@@ -366,15 +384,12 @@ def main():
 
     findings = detect_stuck(captures, profile)
     if findings:
-        print("\nStuck episodes:")
+        add_episode_signals(findings, captures)
         if args.narrate_stuck:
             import narrate
             narrate.add_narratives(findings, captures, profile)
-            for f in findings:
-                print(f"  - [{f['flavour']}] {f['summary']}")
-                print(f"      detail: {f['narrative']}")
-        else:
-            print(format_findings(findings))
+        print("\nStuck episodes:")
+        print(format_findings(findings))
 
 
 if __name__ == "__main__":
