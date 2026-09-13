@@ -14,9 +14,9 @@ Gong) — two flavours of unproductive persistence, hint-reliant "gaming"
 vs hint-avoidant guessing. We label the flavour when the hint state makes
 it clear.
 
-Design note (redesigned 2026-09-12 against a real human-driven Gretel
-recording — see NOTES.md Priority 2 step 4): the original version gated
-on wall-clock dwell on one question (>=90s). That assumed a stuck student
+Design note (redesigned against a real human-driven Gretel recording):
+the original version gated on wall-clock dwell on one question (>=90s).
+That assumed a stuck student
 sits on one question; the real recording showed the opposite — Gretel
 advances the question index on every submission, right or wrong, and a
 skip option appears within ~20s of failed attempts. A genuinely stuck

@@ -76,13 +76,13 @@ PROFILES = {
         "context": "",
     },
     # First real deployment target: teachers of self-study language learners
-    # (initially EFL students using Kōrero, a public chatbot
-    # platform) have good visibility into what happens inside their own
-    # chatbots, but none into what a student does around them — switching to
-    # a translator, going off-task, or getting stuck without ever sending a
-    # message. That gap is what this profile targets. Labels are still
-    # generic language-learning activities (not tied to any one platform's
-    # feature names), so this profile should transfer to other EFL/L2 tools.
+    # (initially EFL students using Kōrero, an AI chatbot suite) have good
+    # visibility into what happens inside their own chatbots, but none into
+    # what a student does around them — switching to a translator, going
+    # off-task, or getting stuck without ever sending a message. That gap is
+    # what this profile targets. Labels are still generic language-learning
+    # activities (not tied to any one platform's feature names), so this
+    # profile should transfer to other EFL/L2 tools.
     "language_acquisition": {
         "labels": [
             "writing_practice",

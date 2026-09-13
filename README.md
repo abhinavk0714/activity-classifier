@@ -118,10 +118,9 @@ level) and looks for *unresolved* items: was this question ever credited,
 inferred from the cumulative score crossing a boundary. Consecutive
 unresolved items form a streak; a streak is flagged as stuck on escalated
 hint use or on 2+ unresolved items in a row. Calibrated against a real
-human-driven recording — see NOTES.md — after an earlier wall-clock-dwell
-version turned out to assume the wrong thing (that a stuck student sits on
-one question; the real app advances the question on every submission,
-right or wrong).
+human-driven recording, after an earlier wall-clock-dwell version turned
+out to assume the wrong thing (that a stuck student sits on one question;
+the real app advances the question on every submission, right or wrong).
 
 On top of that, `scripts/narrate.py` adds an opt-in (`--narrate-stuck`)
 LLM pass: one Ollama call *per already-flagged finding*, given that
