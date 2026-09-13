@@ -23,6 +23,7 @@ Spec format (see tests/fixtures/korero_bilingual.spec.json):
       "db": "~/.screenpipe/db.sqlite",
       "source": "free-text description of the recording setup",
       "scrub_replacements": {"internal.host.example": "korero.example"},
+      "exclude_window_contains": ["activity-classifier"],
       "segments": [
         {"label": "grammar_practice", "start": "<iso>", "end": "<iso>"},
         ...
@@ -103,6 +104,11 @@ def main() -> None:
     # reliable way to exclude anything that isn't the site under test
     # (terminal, PDFs, other apps that happened to be on screen).
     url_filter = spec.get("url_filter", "")
+    # Drop frames whose window_name contains any of these substrings — for
+    # when a window you don't want (e.g. the terminal running this tool)
+    # shows up in the recording despite --monitor-id scoping, since that's
+    # about which *display* is captured, not which windows sit on it.
+    exclude_window = spec.get("exclude_window_contains", [])
     scrub = build_scrubber(spec.get("scrub_replacements", {}))
 
     window_start = min(s["start"] for s in segments)
@@ -121,6 +127,8 @@ def main() -> None:
         ).fetchall()
         for ts, url, win, focused, sp_text, snap, trigger, chash, shash in rows:
             if url_filter and url_filter not in url:
+                continue
+            if any(x in win for x in exclude_window):
                 continue
             n += 1
             ocr_text = ""
