@@ -3,11 +3,11 @@
 Local, offline activity classifier for screenpipe. Research project — a
 demo/showcase now, a study later. Not commercial, no roadmap pressure.
 
-This repo keeps a local `NOTES.md` (gitignored) with current state and
-next steps. Read it first when picking this project back up, and keep it
-updated as things progress — decisions made, what changed, what's next —
-so a fresh session isn't stuck reconstructing context from git history
-alone.
+This repo keeps a local `docs/` folder (gitignored) with current state,
+next steps, and planning documents. Read `docs/NOTES.md` first when
+picking this project back up, and keep it updated as things progress —
+decisions made, what changed, what's next — so a fresh session isn't
+stuck reconstructing context from git history alone.
 
 ## What this depends on
 
