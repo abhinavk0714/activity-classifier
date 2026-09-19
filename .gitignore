@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 annotated/
-NOTES.md
+docs/
 scripts/scrub.local
 tests/fixtures/
 reports/
